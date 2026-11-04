@@ -9,20 +9,20 @@ MODEL="$BASE/models/whisper-small-int8"
 SHA="ca732cb1379efc49417d028465f543d83a39de2c61f3027678de103dc404ce73"
 mkdir -p "$BASE/scripts" "$BASE/models" "$BASE/fonts_all"
 
-echo "1/5 Paquetes de Python"
-pip install -q --break-system-packages faster-whisper opencv-python-headless fonttools pillow numpy
+echo "1/6 Paquetes de Python"
+pip install -q --break-system-packages faster-whisper opencv-python-headless fonttools pillow numpy playwright
 
-echo "2/5 Scripts"
+echo "2/6 Scripts"
 cp "$REPO"/scripts/*.py "$BASE/scripts/"
 
-echo "3/5 Fuentes"
+echo "3/6 Fuentes"
 cp "$REPO"/fonts/*.ttf "$BASE/fonts_all/"
 
-echo "4/5 Clasificador de caras"
+echo "4/6 Clasificador de caras"
 [ -s "$BASE/models/haar_face.xml" ] || curl -fsSL -o "$BASE/models/haar_face.xml" \
   https://raw.githubusercontent.com/opencv/opencv/4.x/data/haarcascades/haarcascade_frontalface_default.xml
 
-echo "5/5 Modelo de Whisper (small int8, desde npm: el CDN de Hugging Face está bloqueado)"
+echo "5/6 Modelo de Whisper (small int8, desde npm: el CDN de Hugging Face está bloqueado)"
 if [ -s "$MODEL/model.bin" ] && echo "$SHA  $MODEL/model.bin" | sha256sum -c --quiet 2>/dev/null; then
   echo "   ya estaba"
 else
@@ -39,4 +39,13 @@ else
   rm -rf "$T"
 fi
 
-echo "Listo. Editor: python3 -I $BASE/scripts/editar_short.py spec.json  ·  fonts_dir: $BASE/fonts_all"
+echo "6/6 Pricedown (para el carrusel de eventos; se baja aparte, no se guarda en el repo)"
+PD_SHA="07a781257f720802c9ac544a0ed048cc6e6ce2294f81f49301e1846adf2ea186"
+if ! { [ -s "$BASE/fonts_all/Pricedown.ttf" ] && echo "$PD_SHA  $BASE/fonts_all/Pricedown.ttf" | sha256sum -c --quiet 2>/dev/null; }; then
+  curl -fsSL -o "$BASE/fonts_all/Pricedown.ttf" \
+    https://raw.githubusercontent.com/conykevin/Pricedown/3ac84cc/pricedown.ttf || echo "   AVISO: no se pudo bajar Pricedown"
+  echo "$PD_SHA  $BASE/fonts_all/Pricedown.ttf" | sha256sum -c --quiet 2>/dev/null || { echo "   AVISO: Pricedown no coincide con el sha256, lo borro"; rm -f "$BASE/fonts_all/Pricedown.ttf"; }
+fi
+command -v google-chrome >/dev/null || command -v chromium >/dev/null || echo "   AVISO: no hay Chrome/Chromium: carrusel_evento.py no va a poder generar las imágenes"
+
+echo "Listo. Editor: python3 -I $BASE/scripts/editar_short.py spec.json  ·  fonts_dir: $BASE/fonts_all  ·  Carrusel: python3 -I $BASE/scripts/carrusel_evento.py spec.json"
