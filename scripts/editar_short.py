@@ -12,6 +12,8 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "cam_pos": "bottom",                     # en split: bottom | top
   "game_crop": null,                       # [x,y,w,h]; null = centro
   "game_x": [[16.4, 21.4, 0]],             # corre el recorte del juego en esos tramos (x del original)
+  "facecam": [1916, 1038, 644, 402],       # REGLA (Giuly 05/11): en el juego no se ve NADA de la cámara de Ali;
+                                           # el recorte del juego se corre para terminar antes de esta x
   "cam_crop": [2036, 1125, 505, 290],      # recorte de la cámara (obligatorio en split/cam)
   "split_y": 1300,                         # alto de la parte de juego en split
   "hook": "EL POLI Y|EL LADRÓN|{ERAN SOCIOS}",   # {} = amarillo, | = salto de línea
@@ -25,7 +27,8 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "sub_size": 80, "sub_outline": 6,        # tamaño y borde de los subtítulos
   "sub_y": null,                           # alto del centro de los subtítulos (por defecto, la unión juego/cámara)
   "sub_margin": 50,                        # márgenes laterales; 130 = no pisan los botones de Instagram
-  "cam_focus": [0.5, 0.5],                 # punto fijo del zoom en la cámara (fracción x, y): poné la cara
+  "cam_focus": [0.5, 0.5],                 # punto fijo del zoom en la cámara (fracción x, y): poné el mentón
+  "cam_fit": null,                         # "width": la facecam entera a lo ancho, pegada arriba (cara más arriba y más chica)
   # ZONAS DE INSTAGRAM (Giuly, 05/11/2026): la interfaz tapa y<220, y>1540 y x>960 entre y 900-1700.
   # Con cámara abajo usá split_y 1150 y un cam_crop con la cara al ~30 % del alto del cuadro,
   # cam_focus [0.5, 0.3] y zoom de cámara ≤ 1.25. Verificá con ig_check.py.
@@ -238,17 +241,30 @@ def main():
             sys.exit("layout split necesita cam_crop")
         cam_h = H - split_y
         top = spec.get("cam_pos", "bottom") == "top"
-        gx = spec.get("game_x")   # [[ini, fin, x_px_del_original], ...]: corre el recorte del juego en esos tramos
-        if gx and not spec.get("game_crop"):
+        gx = spec.get("game_x") or []   # [[ini, fin, x_px_del_original], ...]: corre el recorte del juego en esos tramos
+        fc = spec.get("facecam")        # [x, y, w, h] de la facecam en el original: el juego NUNCA la muestra
+        if (gx or fc) and not spec.get("game_crop"):
             cw = int(sh * W / split_y) // 2 * 2; cx = (sw - cw) // 2
-            xe = str(cx)
+            xmax = sw - cw
+            if fc:
+                xmax = min(xmax, int(fc[0]) - cw)   # el borde derecho del recorte termina antes de la facecam
+                if xmax < 0:
+                    sys.exit("La facecam queda dentro del recorte del juego: subí split_y o usá game_crop")
+            clamp = lambda x: max(0, min(int(x), xmax))
+            xe = str(clamp(cx))
             for a, b, x in reversed(gx):
-                xe = f"if(between(t,{a},{b}),{int(x)},{xe})"
+                xe = f"if(between(t,{a},{b}),{clamp(x)},{xe})"
             gcrop = f"crop={cw}:{sh}:'{xe}':0,scale={W}:{split_y}"
         else:
             gcrop = crop_expr(spec.get('game_crop'), W, split_y)
         game = f"[g]{gcrop}{zoom_expr('game', W, split_y)}{fx_expr(W, split_y)}[gv];"
-        cam = f"[c]{crop_expr(spec['cam_crop'], W, cam_h)}{zoom_expr('cam', W, cam_h)}[cv];"
+        if spec.get("cam_fit") == "width":
+            # la cámara ocupa el ancho y queda pegada arriba del cuadro; abajo (lo que tapa Instagram) va fondo oscuro
+            x_, y_, w_, h_ = spec["cam_crop"]
+            camf = f"crop={w_}:{h_}:{x_}:{y_},scale={W}:-2,pad={W}:{cam_h}:0:0:color=0x10051F,crop={W}:{cam_h}:0:0"
+        else:
+            camf = crop_expr(spec['cam_crop'], W, cam_h)
+        cam = f"[c]{camf}{zoom_expr('cam', W, cam_h)}[cv];"
         order = "[cv][gv]" if top else "[gv][cv]"
         ncz = len(spec.get("cam_zooms", []))
         extra = "".join(f"[cz{i}]" for i in range(ncz))
