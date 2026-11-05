@@ -32,7 +32,7 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
   "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
   "cam_zoom_h": 960, "cam_zoom_src_h": 330, "cam_zoom_push": 0.15,
-  "zooms": [[4.6, 6.0, "game", 1.3]],      # [ini, fin, cam|game|full, factor]
+  "zooms": [[4.6, 6.0, "game", 1.3]],      # [ini, fin, cam|game|full, factor, [foco_x, foco_y]?]  foco opcional (fracción)
   "bw": [[21.0, 22.4]],
   "chat": [[2.0, 5.0, "usuario", "y sino {Vladimir}!"]],
   "images": [[6.0, 7.5, "/ruta/meme.png", "center", 700, "pop"]],   # "pop" opcional: rebote + latido
@@ -205,10 +205,16 @@ def main():
         if not zs:
             return ""
         terms = "+".join(
-            f"between(t,{a},{b})*({f}-1)*min(1,min((t-{a}),({b}-t))/0.15)" for a, b, _, f in zs)
+            f"between(t,{z_[0]},{z_[1]})*({z_[3]}-1)*min(1,min((t-{z_[0]}),({z_[1]}-t))/0.15)" for z_ in zs)
         z = f"(1+{terms})"
-        # punto que queda fijo al hacer zoom (fracción del cuadro). En la cámara: la cara (cam_focus)
-        fx, fy = spec.get("cam_focus", [0.5, 0.5]) if target == "cam" else (0.5, 0.5)
+        # punto que queda fijo al hacer zoom (fracción del cuadro). En la cámara: la cara (cam_focus).
+        # Cada zoom puede traer su propio foco como 5.º elemento: [ini, fin, "game", 1.4, [fx, fy]]
+        dfx, dfy = spec.get("cam_focus", [0.5, 0.5]) if target == "cam" else (0.5, 0.5)
+        fx, fy = str(dfx), str(dfy)
+        for z_ in zs:
+            if len(z_) > 4:
+                fx = f"if(between(t,{z_[0]},{z_[1]}),{z_[4][0]},{fx})"
+                fy = f"if(between(t,{z_[0]},{z_[1]}),{z_[4][1]},{fy})"
         return (f",scale=w='trunc({tw}*{z}/2)*2':h='trunc({th}*{z}/2)*2':eval=frame"
                 f",crop={tw}:{th}:'(iw-{tw})*{fx}':'(ih-{th})*{fy}'")
 
