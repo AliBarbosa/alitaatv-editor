@@ -12,7 +12,8 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "cam_pos": "bottom",                     # en split: bottom | top
   "game_crop": null,                       # [x,y,w,h]; null = centro
   "game_x": [[16.4, 21.4, 0]],             # corre el recorte del juego en esos tramos (x del original)
-  "facecam": [1916, 1038, 644, 402],       # REGLA (Giuly 05/11): en el juego no se ve NADA de la cámara de Ali;
+  "facecam": [1840, 1038, 720, 402],       # REGLA (Giuly 05/11): en el juego no se ve NADA de la cámara de Ali;
+                                           # Medila en cada clip (borde izquierdo real de la facecam; el 05/11 fue x 1848) y dejá ~8 px de margen
                                            # el recorte del juego se corre para terminar antes de esta x
   "cam_crop": [2036, 1125, 505, 290],      # recorte de la cámara (obligatorio en split/cam)
   "split_y": 1300,                         # alto de la parte de juego en split
