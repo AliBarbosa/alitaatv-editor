@@ -24,6 +24,11 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "flash": [[5.35, 0.25]],                 # destello blanco en el juego [ini, duración]
   "sub_size": 80, "sub_outline": 6,        # tamaño y borde de los subtítulos
   "sub_y": null,                           # alto del centro de los subtítulos (por defecto, la unión juego/cámara)
+  "sub_margin": 50,                        # márgenes laterales; 130 = no pisan los botones de Instagram
+  "cam_focus": [0.5, 0.5],                 # punto fijo del zoom en la cámara (fracción x, y): poné la cara
+  # ZONAS DE INSTAGRAM (Giuly, 05/11/2026): la interfaz tapa y<220, y>1540 y x>960 entre y 900-1700.
+  # Con cámara abajo usá split_y 1150 y un cam_crop con la cara al ~30 % del alto del cuadro,
+  # cam_focus [0.5, 0.3] y zoom de cámara ≤ 1.25. Verificá con ig_check.py.
   "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
   "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
   "cam_zoom_h": 960, "cam_zoom_src_h": 330, "cam_zoom_push": 0.15,
@@ -91,7 +96,7 @@ def build_ass(spec, dur, hook_y, sub_y, path):
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Hook,{spec.get('hook_font', 'Montserrat Black')},{spec.get('hook_size', 92)},{WHITE},{WHITE},{BLACK},&H80000000,{0 if spec.get('hook_font') else 1},0,0,0,100,100,0,0,1,{spec.get('hook_outline', 7)},3,8,40,40,{hook_y},1",
-        f"Style: Sub,Montserrat ExtraBold,{spec.get('sub_size', 80)},{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,{spec.get('sub_outline', 6)},3,5,50,50,0,1",
+        f"Style: Sub,Montserrat ExtraBold,{spec.get('sub_size', 80)},{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,{spec.get('sub_outline', 6)},3,5,{spec.get('sub_margin', 50)},{spec.get('sub_margin', 50)},0,1",
         "", "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -202,8 +207,10 @@ def main():
         terms = "+".join(
             f"between(t,{a},{b})*({f}-1)*min(1,min((t-{a}),({b}-t))/0.15)" for a, b, _, f in zs)
         z = f"(1+{terms})"
+        # punto que queda fijo al hacer zoom (fracción del cuadro). En la cámara: la cara (cam_focus)
+        fx, fy = spec.get("cam_focus", [0.5, 0.5]) if target == "cam" else (0.5, 0.5)
         return (f",scale=w='trunc({tw}*{z}/2)*2':h='trunc({th}*{z}/2)*2':eval=frame"
-                f",crop={tw}:{th}:'(iw-{tw})/2':'(ih-{th})/2'")
+                f",crop={tw}:{th}:'(iw-{tw})*{fx}':'(ih-{th})*{fy}'")
 
     def fx_expr(tw, th):
         """Efectos sobre el juego: temblor (shake) y destello blanco (flash), solo en la pantalla del juego."""
