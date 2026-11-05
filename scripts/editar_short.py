@@ -18,12 +18,19 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "hook_font": "Luckiest Guy", "hook_size": 165, "hook_outline": 10, "hook_pos": [540, 600], "hook_seconds": 3.0,
   "subs": [[0.0, 1.2, "HOY {VAMOS} A"]],
   "end_text": "SUMATE AL VIVO", "end_seconds": 2.5, "twitch_glyph": null,
-  "cam_zooms": [[3.55, 4.55, 2289, 1242]], # cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
+  # REGLA (Giuly, 05/11/2026): cámara siempre abajo; el zoom a la cara va DENTRO del cuadro de la cámara
+  # con "zooms": [[ini, fin, "cam", 1.35]]. No usar cam_zooms (la cámara grande tapa el juego).
+  "shake": [[5.3, 6.0, 14]],               # temblor del juego [ini, fin, px]
+  "flash": [[5.35, 0.25]],                 # destello blanco en el juego [ini, duración]
+  "sub_size": 80, "sub_outline": 6,        # tamaño y borde de los subtítulos
+  "sub_y": null,                           # alto del centro de los subtítulos (por defecto, la unión juego/cámara)
+  "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
+  "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
   "cam_zoom_h": 960, "cam_zoom_src_h": 330, "cam_zoom_push": 0.15,
   "zooms": [[4.6, 6.0, "game", 1.3]],      # [ini, fin, cam|game|full, factor]
   "bw": [[21.0, 22.4]],
   "chat": [[2.0, 5.0, "usuario", "y sino {Vladimir}!"]],
-  "images": [[6.0, 7.5, "/ruta/meme.png", "center", 700]],
+  "images": [[6.0, 7.5, "/ruta/meme.png", "center", 700, "pop"]],   # "pop" opcional: rebote + latido
   "sfx": [[14.05, "/ruta/fbi.mp3", -4, 1.75, 0.0]],   # [segundo, archivo, dB, duración?, inicio_en_el_archivo?]
   "crf": 20
 }
@@ -84,7 +91,7 @@ def build_ass(spec, dur, hook_y, sub_y, path):
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Hook,{spec.get('hook_font', 'Montserrat Black')},{spec.get('hook_size', 92)},{WHITE},{WHITE},{BLACK},&H80000000,{0 if spec.get('hook_font') else 1},0,0,0,100,100,0,0,1,{spec.get('hook_outline', 7)},3,8,40,40,{hook_y},1",
-        f"Style: Sub,Montserrat ExtraBold,80,{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,6,2,5,70,70,0,1",
+        f"Style: Sub,Montserrat ExtraBold,{spec.get('sub_size', 80)},{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,{spec.get('sub_outline', 6)},3,5,50,50,0,1",
         "", "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -156,6 +163,9 @@ def end_card(spec, fonts_dir, path):
     d.text((W // 2, H // 2 - 70), spec.get("end_text", "SUMATE AL VIVO").upper(),
            font=ImageFont.truetype(black, 84), fill="white", anchor="mm",
            stroke_width=4, stroke_fill="black")
+    if spec.get("end_sub"):   # segunda línea en amarillo (ej. horario del evento)
+        d.text((W // 2, H // 2 - 175), spec["end_sub"].upper(), font=ImageFont.truetype(black, 58),
+               fill=(255, 225, 0), anchor="mm", stroke_width=4, stroke_fill="black")
     p = pill("AlitaaTV", find_font(fonts_dir, "Montserrat-ExtraBold.ttf"), spec.get("twitch_glyph"), 60)
     card.alpha_composite(p, ((W - p.width) // 2, H // 2 + 20))
     d.text((W // 2, H // 2 + 20 + p.height + 50), "twitch.tv/alitaatv",
@@ -195,6 +205,21 @@ def main():
         return (f",scale=w='trunc({tw}*{z}/2)*2':h='trunc({th}*{z}/2)*2':eval=frame"
                 f",crop={tw}:{th}:'(iw-{tw})/2':'(ih-{th})/2'")
 
+    def fx_expr(tw, th):
+        """Efectos sobre el juego: temblor (shake) y destello blanco (flash), solo en la pantalla del juego."""
+        out = ""
+        sh_ = spec.get("shake", [])      # [[ini, fin, px]]
+        if sh_:
+            m = int(max(s[2] for s in sh_)) + 2
+            e = "+".join(f"between(t,{a},{b})*{px}" for a, b, px in sh_)
+            out += (f",scale={tw + 2 * m}:{th + 2 * m}"
+                    f",crop={tw}:{th}:'{m}+({e})*sin(t*83)':'{m}+({e})*cos(t*67)'")
+        fl = spec.get("flash", [])       # [[ini, duración]]
+        if fl:
+            e = "+".join(f"between(t,{a},{a}+{d})*(1-(t-{a})/{d})" for a, d in fl)
+            out += f",eq=brightness='min(0.7,0.7*({e}))':eval=frame"
+        return out
+
     if layout == "split":
         if not spec.get("cam_crop"):
             sys.exit("layout split necesita cam_crop")
@@ -209,7 +234,7 @@ def main():
             gcrop = f"crop={cw}:{sh}:'{xe}':0,scale={W}:{split_y}"
         else:
             gcrop = crop_expr(spec.get('game_crop'), W, split_y)
-        game = f"[g]{gcrop}{zoom_expr('game', W, split_y)}[gv];"
+        game = f"[g]{gcrop}{zoom_expr('game', W, split_y)}{fx_expr(W, split_y)}[gv];"
         cam = f"[c]{crop_expr(spec['cam_crop'], W, cam_h)}{zoom_expr('cam', W, cam_h)}[cv];"
         order = "[cv][gv]" if top else "[gv][cv]"
         ncz = len(spec.get("cam_zooms", []))
@@ -242,6 +267,7 @@ def main():
     for a, b in spec.get("bw", []):
         i_, o_ = nxt(); vf += f";[{i_}]hue=s=0:enable='between(t,{a},{b})'[{o_}]"
 
+    sub_y = int(spec.get("sub_y", sub_y))   # p. ej. split_y - 120: sobre el juego (oscuro), no sobre la pared clara de la cámara
     build_ass(spec, dur, hook_y, sub_y, ass)
     end_card(spec, fonts_dir, card)
     pill("AlitaaTV", find_font(fonts_dir, "Montserrat-ExtraBold.ttf"), spec.get("twitch_glyph"), 34).save(tag)
@@ -277,7 +303,9 @@ def main():
         n += 1
 
     # memes / imágenes
-    for i, (a, b, path, pos, width) in enumerate(spec.get("images", [])):
+    for i, im in enumerate(spec.get("images", [])):
+        a, b, path, pos, width = im[:5]
+        pop = len(im) > 5 and im[5] == "pop"   # entrada con rebote + latido suave
         inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", path]
         if pos == "center":
             xy = f"(W-w)/2:(H-h)/2"
@@ -286,7 +314,12 @@ def main():
         else:
             xy = pos                      # "x:y" literal
         i_, o_ = nxt()
-        vf += f";[{n}:v]scale={int(width)}:-1,format=rgba[im{i}];[{i_}][im{i}]overlay={xy}:enable='between(t,{a},{b})'[{o_}]"
+        if pop:
+            k = f"(if(lt(t-{a},0.25),0.6+0.5*(t-{a})/0.25,if(lt(t-{a},0.4),1.1-0.1*(t-{a}-0.25)/0.15,1+0.04*sin((t-{a})*9))))"
+            sc = f"scale=w='trunc({int(width)}*{k}/2)*2':h=-2:eval=frame"
+        else:
+            sc = f"scale={int(width)}:-1"
+        vf += f";[{n}:v]format=rgba,{sc}[im{i}];[{i_}][im{i}]overlay={xy}:eval=frame:enable='between(t,{a},{b})'[{o_}]"
         n += 1
 
     font_esc = os.path.dirname(find_font(fonts_dir, "Montserrat-Black.ttf")).replace("\\", "/").replace(":", "\\:")
