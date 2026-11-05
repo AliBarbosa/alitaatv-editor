@@ -29,7 +29,8 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "sub_y": null,                           # alto del centro de los subtítulos (por defecto, la unión juego/cámara)
   "sub_margin": 50,                        # márgenes laterales; 130 = no pisan los botones de Instagram
   "cam_focus": [0.5, 0.5],                 # punto fijo del zoom en la cámara (fracción x, y): poné el mentón
-  "cam_fit": null,                         # "width": la facecam entera a lo ancho, pegada arriba (cara más arriba y más chica)
+  "cam_fit": null,                         # NO USAR "width": deja franja oscura abajo. REGLA (Ali 05/11): el video cubre toda la pantalla.
+                                           # Con cámara abajo: split_y 1000 y cam_crop [cara_x-236, borde_sup_facecam, 472, 402] (llena el cuadro)
   # ZONAS DE INSTAGRAM (Giuly, 05/11/2026): la interfaz tapa y<220, y>1540 y x>960 entre y 900-1700.
   # Con cámara abajo usá split_y 1150 y un cam_crop con la cara al ~30 % del alto del cuadro,
   # cam_focus [0.5, 0.3] y zoom de cámara ≤ 1.25. Verificá con ig_check.py.
