@@ -37,6 +37,7 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
   "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
   "cam_zoom_h": 960, "cam_zoom_src_h": 330, "cam_zoom_push": 0.15,
+  "full_game": [[8.0, 10.5]],             # en split: tramos con el juego a pantalla completa (sin cámara) para acentuar momentos
   "zooms": [[4.6, 6.0, "game", 1.3]],      # [ini, fin, cam|game|full, factor, [foco_x, foco_y]?]  foco opcional (fracción)
   "bw": [[21.0, 22.4]],
   "chat": [[2.0, 5.0, "usuario", "y sino {Vladimir}!"]],
@@ -270,7 +271,19 @@ def main():
         order = "[cv][gv]" if top else "[gv][cv]"
         ncz = len(spec.get("cam_zooms", []))
         extra = "".join(f"[cz{i}]" for i in range(ncz))
-        vf = f"[0:v]split={2 + ncz}[g][c]{extra};{game}{cam}{order}vstack=2{zoom_expr('full', W, H)}[base]"
+        fg_ = spec.get("full_game", [])
+        if fg_:
+            fge = "+".join(f"between(t,{a},{b})" for a, b in fg_)
+            fgx = ""
+            if fc:   # el recorte a pantalla completa tampoco muestra la facecam
+                fw = int(sh * W / H) // 2 * 2; fx0 = min((sw - fw) // 2, int(fc[0]) - fw)
+                fgx = f"crop={fw}:{sh}:{max(fx0, 0)}:0,scale={W}:{H}"
+            fgcrop = fgx or crop_expr(spec.get('game_crop'), W, H)
+            vf = (f"[0:v]split={3 + ncz}[g][c][f]{extra};{game}{cam}"
+                  f"[f]{fgcrop}{zoom_expr('game', W, H)}{fx_expr(W, H)}[fv];"
+                  f"{order}vstack=2[vs];[vs][fv]overlay=0:0:enable='{fge}'{zoom_expr('full', W, H)}[base]")
+        else:
+            vf = f"[0:v]split={2 + ncz}[g][c]{extra};{game}{cam}{order}vstack=2{zoom_expr('full', W, H)}[base]"
         if top:   # cámara arriba, juego abajo
             hook_y, sub_y = cam_h - 60, cam_h + int(split_y * 0.62)
             tag_xy = (30, 240)
@@ -308,7 +321,8 @@ def main():
               "-loop", "1", "-t", f"{dur:.3f}", "-i", card]
     n = 3
     fs = max(dur - end_s, 0)
-    i_, o_ = nxt(); vf += f";[{i_}][1:v]overlay={tag_xy[0]}:{tag_xy[1]}:enable='lt(t,{fs:.2f})'[{o_}]"
+    nofg = "".join(f"*not(between(t,{a},{b}))" for a, b in (spec.get("full_game", []) if layout == "split" else []))
+    i_, o_ = nxt(); vf += f";[{i_}][1:v]overlay={tag_xy[0]}:{tag_xy[1]}:enable='lt(t,{fs:.2f}){nofg}'[{o_}]"
 
     # cámara grande que sigue la cara: crece desde la unión y tapa parte del juego, con un push-in lento
     LH = int(spec.get("cam_zoom_h", 960)); SH = int(spec.get("cam_zoom_src_h", 330))
