@@ -397,7 +397,8 @@ def main():
         af += f";{''.join(mix)}amix=inputs={len(mix)}:duration=first:normalize=0,alimiter=limit=0.89[mx]"
     else:
         af += ";[main]anull[mx]"
-    af += f";[mx]afade=t=out:st={max(dur-0.6,0):.2f}:d=0.6[a]"
+    # apad + atrim: el audio dura siempre lo mismo que el video (amix a veces lo cortaba antes)
+    af += f";[mx]apad,atrim=0:{dur:.3f},afade=t=out:st={max(dur-0.6,0):.2f}:d=0.6[a]"
 
     cmd = ["ffmpeg", "-y", "-v", "error", *inputs,
            "-filter_complex", vf + ";" + af, "-map", "[v]", "-map", "[a]",
