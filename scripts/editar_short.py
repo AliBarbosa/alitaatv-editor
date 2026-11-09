@@ -42,7 +42,7 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "zooms": [[4.6, 6.0, "game", 1.3]],      # [ini, fin, cam|game|full, factor, [foco_x, foco_y]?]  foco opcional (fracción)
   "bw": [[21.0, 22.4]],
   "chat": [[2.0, 5.0, "usuario", "y sino {Vladimir}!"]],
-  "images": [[6.0, 7.5, "/ruta/meme.png", "center", 700, "pop"]],   # "pop" opcional: rebote + latido
+  "images": [[6.0, 7.5, "/ruta/meme.png", "center", 700, "pop"]],   # 6.º opcional: "pop" (rebote + latido) o "slide" (entra deslizándose)
   "sfx": [[14.05, "/ruta/fbi.mp3", -4, 1.75, 0.0]],   # [segundo, archivo, dB, duración?, inicio_en_el_archivo?]
   "crf": 20
 }
@@ -207,12 +207,14 @@ def main():
         return f"scale={tw}:{th}:force_original_aspect_ratio=increase,crop={tw}:{th}"
 
     def zoom_expr(target, tw, th):
-        """Punch-in suave (rampa 0,15 s) en los tramos de spec['zooms'] para ese objetivo."""
+        """Punch-in suave (rampa 0,15 s) en los tramos de spec['zooms'] para ese objetivo.
+        Usa zoompan (salida de tamaño fijo). Antes era scale con eval=frame + crop, pero crop
+        no ve el tamaño nuevo del cuadro y el zoom quedaba anclado arriba a la izquierda."""
         zs = [z for z in spec.get("zooms", []) if z[2] == target]
         if not zs:
             return ""
         terms = "+".join(
-            f"between(t,{z_[0]},{z_[1]})*({z_[3]}-1)*min(1,min((t-{z_[0]}),({z_[1]}-t))/0.15)" for z_ in zs)
+            f"between(it,{z_[0]},{z_[1]})*({z_[3]}-1)*min(1,min((it-{z_[0]}),({z_[1]}-it))/0.15)" for z_ in zs)
         z = f"(1+{terms})"
         # punto que queda fijo al hacer zoom (fracción del cuadro). En la cámara: la cara (cam_focus).
         # Cada zoom puede traer su propio foco como 5.º elemento: [ini, fin, "game", 1.4, [fx, fy]]
@@ -220,10 +222,10 @@ def main():
         fx, fy = str(dfx), str(dfy)
         for z_ in zs:
             if len(z_) > 4:
-                fx = f"if(between(t,{z_[0]},{z_[1]}),{z_[4][0]},{fx})"
-                fy = f"if(between(t,{z_[0]},{z_[1]}),{z_[4][1]},{fy})"
-        return (f",scale=w='trunc({tw}*{z}/2)*2':h='trunc({th}*{z}/2)*2':eval=frame"
-                f",crop={tw}:{th}:'(iw-{tw})*{fx}':'(ih-{th})*{fy}'")
+                fx = f"if(between(it,{z_[0]},{z_[1]}),{z_[4][0]},{fx})"
+                fy = f"if(between(it,{z_[0]},{z_[1]}),{z_[4][1]},{fy})"
+        return (f",zoompan=z='{z}':x='(iw-iw/zoom)*{fx}':y='(ih-ih/zoom)*{fy}'"
+                f":d=1:s={tw}x{th}:fps=30")
 
     def fx_expr(tw, th):
         """Efectos sobre el juego: temblor (shake) y destello blanco (flash), solo en la pantalla del juego."""
@@ -359,6 +361,7 @@ def main():
     for i, im in enumerate(spec.get("images", [])):
         a, b, path, pos, width = im[:5]
         pop = len(im) > 5 and im[5] == "pop"   # entrada con rebote + latido suave
+        slide = len(im) > 5 and im[5] == "slide"   # entra deslizándose desde la izquierda (0,3 s)
         inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", path]
         if pos == "center":
             xy = f"(W-w)/2:(H-h)/2"
@@ -372,6 +375,9 @@ def main():
             sc = f"scale=w='trunc({int(width)}*{k}/2)*2':h=-2:eval=frame"
         else:
             sc = f"scale={int(width)}:-1"
+        if slide:
+            x0, y0 = xy.split(":", 1)
+            xy = f"x='{x0}-(W+w)*pow(max(0,1-(t-{a})/0.3),2)':y={y0}"
         vf += f";[{n}:v]format=rgba,{sc}[im{i}];[{i_}][im{i}]overlay={xy}:eval=frame:enable='between(t,{a},{b})'[{o_}]"
         n += 1
 
