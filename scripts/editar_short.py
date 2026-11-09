@@ -34,6 +34,7 @@ spec.json (claves; las opcionales tienen valor por defecto):
   # ZONAS DE INSTAGRAM (Giuly, 05/11/2026): la interfaz tapa y<220, y>1540 y x>960 entre y 900-1700.
   # Con cámara abajo usá split_y 1150 y un cam_crop con la cara al ~30 % del alto del cuadro,
   # cam_focus [0.5, 0.3] y zoom de cámara ≤ 1.25. Verificá con ig_check.py.
+  "end_pill": true,                        # false = cierre sin la píldora violeta "AlitaaTV"
   "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
   "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
   "cam_zoom_h": 960, "cam_zoom_src_h": 330, "cam_zoom_push": 0.15,
@@ -179,8 +180,12 @@ def end_card(spec, fonts_dir, path):
         d.text((W // 2, H // 2 - 175), spec["end_sub"].upper(), font=ImageFont.truetype(black, 58),
                fill=(255, 225, 0), anchor="mm", stroke_width=4, stroke_fill="black")
     p = pill("AlitaaTV", find_font(fonts_dir, "Montserrat-ExtraBold.ttf"), spec.get("twitch_glyph"), 60)
-    card.alpha_composite(p, ((W - p.width) // 2, H // 2 + 20))
-    d.text((W // 2, H // 2 + 20 + p.height + 50), "twitch.tv/alitaatv",
+    if spec.get("end_pill", True):   # "end_pill": false = sin la píldora violeta AlitaaTV
+        card.alpha_composite(p, ((W - p.width) // 2, H // 2 + 20))
+        link_y = H // 2 + 20 + p.height + 50
+    else:
+        link_y = H // 2 + 40
+    d.text((W // 2, link_y), "twitch.tv/alitaatv",
            font=ImageFont.truetype(find_font(fonts_dir, "Montserrat-ExtraBold.ttf"), 40),
            fill=(232, 228, 223), anchor="mm")
     card.save(path)
