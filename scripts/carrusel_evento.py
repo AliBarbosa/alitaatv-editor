@@ -26,7 +26,13 @@ spec.json (rutas absolutas; los videos pueden ser 2560x1440 o 1920x1080 con la f
     ]
   }
 }
-Opcional en cada clip: "cara": [cx, cy] (si no, se calcula con seguir_cara.py).
+Opcional en cada clip: "cara": [cx, cy] (si no, se calcula con seguir_cara.py) y "facecam": [x, y, w, h].
+Opcional general:
+  "facecam": [x, y, w, h]   recuadro de la cámara en px del video (por defecto el de 2560x1440 escalado:
+                            [1916,1078,644,362]; los clips de 1920x1080 de nov. 2026 usan [1388,781,532,299]).
+                            El juego se recorta por encima de la cámara, así no se ve nada de ella.
+  "etiqueta": "FECHA 2"     sello dorado inclinado arriba a la derecha de la portada (para que cada semana cambie).
+  "video": {"titulo_size": 110}   tamaño del título del video si es largo.
 Requiere: ffmpeg, playwright (pip) y Chrome o Chromium. Fuentes en $ALITAA_BASE/fonts_all (setup.sh).
 """
 import asyncio, json, os, subprocess, sys, tempfile, shutil, datetime
@@ -100,8 +106,16 @@ def flecha():
             f"<div style='width:84px;height:84px;border-radius:50%;background:{GOLD};border:5px solid #000;display:flex;align-items:center;justify-content:center'>"
             f"<svg width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='#000' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M5 12h14M13 6l6 6-6 6'/></svg></div></div>")
 
+def sello():
+    t = spec.get('etiqueta')
+    if not t:
+        return ''
+    return (f"<div style='position:absolute;right:30px;top:24px;transform:rotate(7deg);background:{GOLD};border:6px solid #000;"
+            f"border-radius:10px;padding:10px 26px 4px;box-shadow:6px 6px 0 #000'><div class='pd' style='font-size:64px;color:#000;"
+            f"-webkit-text-stroke:0;letter-spacing:2px'>{t}</div></div>")
+
 def bgdiv(img, extra=''):
-    return f"<div class='bg' style=\"background-image:url(file://{img});{extra}\"></div>"
+    return f"<div class='bg' style=\"background-image:url('{Path(img).resolve().as_uri()}');{extra}\"></div>"
 
 t1, t2, t3 = spec['titulo']
 SL = {}
@@ -116,7 +130,7 @@ SL['portada'] = f"""<div class='s'>{bgdiv(fondo(spec['fondo_portada'], 'portada'
 <div class='pd' style='font-size:62px;color:{GOLD};-webkit-text-stroke:6px #000'>PREMIOS EN PLATA DEL JUEGO</div>
 <div style='display:flex;justify-content:space-around;width:100%'>
 {''.join(f"<div style='display:flex;align-items:center;gap:10px'>{trofeo(c, n, 96)}<div class='pd' style='font-size:64px;-webkit-text-stroke:6px #000'>{n}°</div></div>" for c, n in TROF)}</div></div>
-{flecha()}</div>"""
+{sello()}{flecha()}</div>"""
 
 SL['premios'] = f"""<div class='s' style='background:#000'>{bgdiv(fondo(spec['fondo_premios'], 'premios'), 'background-position:center top;filter:brightness(.55)')}
 <div style='position:absolute;left:0;right:0;top:70px;text-align:center'><div class='pd' style='font-size:190px;color:{GOLD}'>PREMIOS</div></div>
@@ -140,7 +154,7 @@ V = spec['video']
 SL['marco'] = f"""<div class='s'>
 <div style='position:absolute;left:0;right:0;top:0;height:300px;background:#000;display:flex;flex-direction:column;justify-content:center;padding:0 60px'>
 <div class='sub' style='font-size:36px;letter-spacing:6px;color:{GOLD}'>{V.get('kicker', 'SPOILER')}</div>
-<div class='pd' style='font-size:122px;white-space:nowrap'>{V.get('titulo', 'MANEJO HORRIBLE')}</div></div>
+<div class='pd' style='font-size:{V.get("titulo_size", 122)}px;white-space:nowrap'>{V.get('titulo', 'MANEJO HORRIBLE')}</div></div>
 <div style='position:absolute;left:0;right:0;bottom:0;height:200px;background:#000;display:flex;align-items:center;justify-content:center'>
 <div class='pd' style='font-size:84px;color:{GOLD};-webkit-text-stroke:7px #000'>{V.get('pie', 'ASÍ QUE TENÉS CHANCES')}</div></div></div>"""
 N = len(V['clips'])
@@ -176,27 +190,33 @@ for i, n in enumerate(['portada', 'premios', 'como-sumarte'], 1):
 # ---------- Video de choques ----------
 VY, VH = 300, 850
 
-def cara(c):
+def camara(c):
+    w, _ = probe(c['video']); s = w / 2560
+    return c.get('facecam') or spec.get('facecam') or [int(v * s) for v in (1916, 1078, 644, 362)]
+
+def cara(c, fc):
     if 'cara' in c:
         return c['cara']
-    w, _ = probe(c['video']); s = w / 2560
     j = TMP / 'caras.json'
-    run(['python3', '-I', str(BASE / 'scripts' / 'seguir_cara.py'), c['video'],
-         *[str(int(v * s)) for v in (1916, 1078, 644, 362)], str(j)])
-    a = [r for r in json.load(open(j)) if r[2] < 1320 * s]   # descarta la cara del dibujo de la remera
+    run(['python3', '-I', str(BASE / 'scripts' / 'seguir_cara.py'), c['video'], *[str(v) for v in fc], str(j)])
+    a = [r for r in json.load(open(j)) if r[2] < fc[1] + 0.67 * fc[3]]   # descarta la cara del dibujo de la remera
     xs, ys = sorted(r[1] for r in a), sorted(r[2] for r in a)
-    return [xs[len(xs) // 2] / s, ys[len(ys) // 2] / s]
+    return [xs[len(xs) // 2], ys[len(ys) // 2]]
 
 def tramo(i, c):
-    w, h = probe(c['video']); s = w / 2560
-    cx, cy = cara(c)
-    fx, fy = int((cx - 252) * s), int(min(cy - 120, 1440 - 290) * s)
-    gw, gh, gx = int(1371 * s), int(1078 * s), int(595 * s)
+    w, h = probe(c['video'])
+    fc = camara(c); cx, cy = cara(c, fc)
+    # recuadro de la cara: 80 % del alto de la cámara, proporción 505:290, dentro de la facecam
+    ch = int(fc[3] * 0.8) // 2 * 2; cw = int(ch * 505 / 290) // 2 * 2
+    fx = int(min(max(cx - cw / 2, fc[0]), fc[0] + fc[2] - cw)); fy = int(min(max(cy + 0.07 * fc[3] - ch / 2, fc[1]), fc[1] + fc[3] - ch))
+    # juego: por encima de la cámara y sin pasar su borde izquierdo
+    gh = min(h, fc[1]) // 2 * 2; gw = int(gh * 1080 / VH) // 2 * 2
+    gx = int(min(max(w / 2 - gw / 2, 0), w - gw))
     dur = c['dur']; iy = VY + VH - 210 - 20
     ins = ['-ss', str(c['ini']), '-t', str(dur), '-i', c['video'], '-loop', '1', '-i', str(TMP / 'marco.png'),
            '-loop', '1', '-i', str(TMP / f'L{i}.png')]
     f = (f"[0:v]fps=30,split=2[g][c];[g]crop={gw}:{gh}:{gx}:0,scale=1080:{VH},setsar=1[gv];"
-         f"[c]crop={int(505*s)}:{int(290*s)}:{fx}:{fy},scale=352:202,pad=360:210:4:4:color=0xA78BFA[cv];"
+         f"[c]crop={cw}:{ch}:{fx}:{fy},scale=352:202,pad=360:210:4:4:color=0xA78BFA[cv];"
          f"color=black:s=1080x1350:r=30:d={dur}[bg];[bg][gv]overlay=0:{VY}[a];[a][cv]overlay=704:{iy}[b];"
          f"[b][1:v]overlay=0:0:shortest=1[o];[o][2:v]overlay=16:{VY + 14}:shortest=1[v]")
     if 'wasted' in c:
