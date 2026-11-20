@@ -19,6 +19,11 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "split_y": 1300,                         # alto de la parte de juego en split
   "hook": "EL POLI Y|EL LADRÓN|{ERAN SOCIOS}",   # {} = amarillo, | = salto de línea
   "hook_font": "Luckiest Guy", "hook_size": 165, "hook_outline": 10, "hook_pos": [540, 600], "hook_seconds": 3.0,
+  "hook_style": null,                      # "miniatura" = estilo de la miniatura de YouTube (Ali, 20/11/2026): Barlow Condensed Black,
+                                           # renglones blancos con borde violeta oscuro y el renglón entre {} en degradé atardecer con borde blanco.
+                                           # Aparece y desaparece de golpe (sin rebote): poné un whoosh en 0 y en hook_seconds. Usa hook_pos [x, y].
+  "cards": [[34.95, 36.5, "¿SOY LA|{ÚNICA? 👀}", 720, "pop"]],   # carteles grandes con el mismo estilo [ini, fin, texto, centro_y, anim?]
+                                           # un renglón entero entre {} va en degradé; los emoji salen a color
   "subs": [[0.0, 1.2, "HOY {VAMOS} A"]],
   "end_text": "SUMATE AL VIVO", "end_seconds": 2.5, "twitch_glyph": null,
   # REGLA (Giuly, 05/11/2026): cámara siempre abajo; el zoom a la cara va DENTRO del cuadro de la cámara
@@ -34,6 +39,7 @@ spec.json (claves; las opcionales tienen valor por defecto):
   # ZONAS DE INSTAGRAM (Giuly, 05/11/2026): la interfaz tapa y<220, y>1540 y x>960 entre y 900-1700.
   # Con cámara abajo usá split_y 1150 y un cam_crop con la cara al ~30 % del alto del cuadro,
   # cam_focus [0.5, 0.3] y zoom de cámara ≤ 1.25. Verificá con ig_check.py.
+  "end_link": true,                        # false = cierre sin "twitch.tv/alitaatv" (regla de Ali del 13/11: usá false + twitch_glyph)
   "end_pill": true,                        # false = cierre sin la píldora violeta "AlitaaTV"
   "end_sub": null,                         # línea amarilla arriba del texto de cierre (ej. "VIERNES 19 H ARG")
   "cam_zooms": [[3.55, 4.55, 2289, 1242]], # (no usar) cámara grande centrada en la cara [ini, fin, cara_x, cara_y]
@@ -109,7 +115,7 @@ def build_ass(spec, dur, hook_y, sub_y, path):
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     hook = spec.get("hook")
-    if hook:
+    if hook and spec.get("hook_style") != "miniatura":
         hs = min(spec.get("hook_seconds", 3.0), dur)
         pos = spec.get("hook_pos")   # [x, y] = centro del bloque del hook; sin esto va arriba
         tag = f"\\an5\\pos({pos[0]},{pos[1]})" if pos else ""
@@ -120,6 +126,74 @@ def build_ass(spec, dur, hook_y, sub_y, path):
         y_ = top_cz if any(a - 0.05 <= s < b for a, b, *_ in czs) else sub_y   # suben si está la cámara grande
         lines.append(f"Dialogue: 0,{ts(s)},{ts(min(e, dur))},Sub,,0,0,0,,{{\\pos({W//2},{y_})\\fscx85\\fscy85\\t(0,80,\\fscx100\\fscy100)}}{ass_text(txt)}")
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+
+
+SUNSET = [(255, 170, 70), (255, 92, 120), (214, 60, 190), (110, 70, 230), (60, 90, 220)]
+MDARK = (25, 10, 45)
+
+
+def _sunset(w, h):
+    g = Image.new("RGB", (w, h)); px = g.load(); n = len(SUNSET) - 1
+    for y in range(h):
+        for x in range(w):
+            t = min(max(x / w * 0.45 + y / h * 0.55, 0), 0.9999) * n
+            i, f = int(t), t - int(t)
+            c0, c1 = SUNSET[i], SUNSET[i + 1]
+            px[x, y] = tuple(int(c0[k] + (c1[k] - c0[k]) * f) for k in range(3))
+    return g
+
+
+def miniatura_card(text, fonts_dir, path, maxw=940, size_white=150, size_grad=200):
+    """Cartel estilo miniatura de YouTube. text: renglones con |; un renglón entre {} va en degradé."""
+    from PIL import ImageFilter
+    fpath = find_font(fonts_dir, "BarlowCondensed-Black.ttf")
+    emoji_font = next(iter(glob.glob("/usr/share/fonts/**/NotoColorEmoji.ttf", recursive=True)), None)
+    rows = []
+    for raw in text.split("|"):
+        grad = raw.strip().startswith("{") and raw.strip().endswith("}")
+        t = raw.strip().strip("{}")
+        emo = ""
+        while t and ord(t[-1]) > 0x2500:      # emoji al final del renglón
+            emo = t[-1] + emo; t = t[:-1]
+        t = t.rstrip()
+        size = size_grad if grad else size_white
+        while True:
+            f = ImageFont.truetype(fpath, size)
+            tw = f.getbbox(t, stroke_width=16)[2]
+            ew = int(size * 0.95) * len(emo.replace("\ufe0f", "")) + (20 if emo else 0)
+            if tw + ew <= maxw or size < 40:
+                break
+            size -= 4
+        bb = f.getbbox(t, stroke_width=16); Wr, Hr = bb[2] + 40, bb[3] + 40
+        m = Image.new("L", (Wr, Hr)); ImageDraw.Draw(m).text((20, 10), t, font=f, fill=255)
+        layer = Image.new("RGBA", (Wr, Hr), (0, 0, 0, 0))
+        sh = Image.new("L", (Wr, Hr))
+        ImageDraw.Draw(sh).text((26 if grad else 20, 18 if grad else 10), t, font=f, fill=255,
+                                stroke_width=16 if grad else 14, stroke_fill=255)
+        layer.paste(Image.new("RGBA", (Wr, Hr), MDARK + (255,)), (0, 0), sh)
+        if grad:
+            st = Image.new("L", (Wr, Hr)); ImageDraw.Draw(st).text((20, 10), t, font=f, fill=255, stroke_width=11, stroke_fill=255)
+            layer.paste(Image.new("RGBA", (Wr, Hr), (255, 255, 255, 255)), (0, 0), st)
+            layer.paste(_sunset(Wr, Hr).convert("RGBA"), (0, 0), m)
+        else:
+            layer.paste(Image.new("RGBA", (Wr, Hr), (255, 255, 255, 255)), (0, 0), m)
+        layer = layer.crop(layer.getbbox())
+        if emo and emoji_font:
+            ef = ImageFont.truetype(emoji_font, 109)
+            e = Image.new("RGBA", (140 * len(emo), 160), (0, 0, 0, 0))
+            ImageDraw.Draw(e).text((10, 10), emo, font=ef, embedded_color=True)
+            e = e.crop(e.getbbox()); k = layer.height * 0.75 / e.height
+            e = e.resize((int(e.width * k), int(e.height * k)), Image.LANCZOS)
+            r = Image.new("RGBA", (layer.width + 20 + e.width, layer.height), (0, 0, 0, 0))
+            r.alpha_composite(layer, (0, 0)); r.alpha_composite(e, (layer.width + 20, (layer.height - e.height) // 2))
+            layer = r
+        rows.append(layer)
+    Wc = max(r.width for r in rows); Hc = sum(r.height for r in rows) + 10 * (len(rows) - 1)
+    out = Image.new("RGBA", (Wc, Hc), (0, 0, 0, 0)); y = 0
+    for r in rows:
+        out.alpha_composite(r, ((Wc - r.width) // 2, y)); y += r.height + 10
+    out.save(path)
+    return out.size
 
 
 def pill(text, font_path, glyph=None, size=44):
@@ -185,7 +259,7 @@ def end_card(spec, fonts_dir, path):
         link_y = H // 2 + 20 + p.height + 50
     else:
         link_y = H // 2 + 40
-    d.text((W // 2, link_y), "twitch.tv/alitaatv",
+    if spec.get("end_link", True): d.text((W // 2, link_y), "twitch.tv/alitaatv",
            font=ImageFont.truetype(find_font(fonts_dir, "Montserrat-ExtraBold.ttf"), 40),
            fill=(232, 228, 223), anchor="mm")
     card.save(path)
@@ -362,8 +436,20 @@ def main():
         vf += f";[{n}:v]format=rgba,fade=t=in:st={a}:d=0.15:alpha=1[ch{i}];[{i_}][ch{i}]overlay={x}:{y}:enable='between(t,{a},{b})'[{o_}]"
         n += 1
 
+    # hook y carteles estilo miniatura (se agregan como imágenes)
+    extra_imgs = []
+    if spec.get("hook_style") == "miniatura" and spec.get("hook"):
+        hp = os.path.join(tmp, "hook_mini.png")
+        hw, hh = miniatura_card(spec["hook"], fonts_dir, hp)
+        hx, hy = spec.get("hook_pos", [540, 600])
+        extra_imgs.append([0.0, min(spec.get("hook_seconds", 3.0), dur), hp, f"{hx - hw // 2}:{hy - hh // 2}", hw])
+    for j, c in enumerate(spec.get("cards", [])):
+        cp_ = os.path.join(tmp, f"card_mini{j}.png")
+        cw_, ch_ = miniatura_card(c[2], fonts_dir, cp_, maxw=760, size_white=170, size_grad=230)
+        extra_imgs.append([c[0], c[1], cp_, f"(W-w)/2:({int(c[3])}-h/2)", cw_] + ([c[4]] if len(c) > 4 else []))
+
     # memes / imágenes
-    for i, im in enumerate(spec.get("images", [])):
+    for i, im in enumerate(extra_imgs + spec.get("images", [])):
         a, b, path, pos, width = im[:5]
         pop = len(im) > 5 and im[5] == "pop"   # entrada con rebote + latido suave
         slide = len(im) > 5 and im[5] == "slide"   # entra deslizándose desde la izquierda (0,3 s)

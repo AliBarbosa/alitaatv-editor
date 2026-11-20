@@ -17,6 +17,7 @@ cp "$REPO"/scripts/*.py "$BASE/scripts/"
 
 echo "3/6 Fuentes"
 cp "$REPO"/fonts/*.ttf "$BASE/fonts_all/"
+mkdir -p "$BASE/assets" && cp "$REPO"/assets/* "$BASE/assets/"
 
 echo "4/6 Clasificador de caras"
 [ -s "$BASE/models/haar_face.xml" ] || curl -fsSL -o "$BASE/models/haar_face.xml" \
