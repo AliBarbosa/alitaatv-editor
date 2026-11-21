@@ -32,7 +32,9 @@ spec.json (claves; las opcionales tienen valor por defecto):
   "flash": [[5.35, 0.25]],                 # destello blanco en el juego [ini, duración]
   "sub_size": 80, "sub_outline": 6,        # tamaño y borde de los subtítulos
   "sub_y": null,                           # alto del centro de los subtítulos (por defecto, la unión juego/cámara)
-  "sub_margin": 50,                        # márgenes laterales; 130 = no pisan los botones de Instagram
+  "sub_margin": 50,                        # márgenes laterales; 130 = no pisan los botones de Instagram (nunca menos que safe_x)
+  "safe_x": 120,                           # REGLA (Ali, 21/11/2026): margen lateral seguro. En pantalla completa, los celulares altos
+                                           # recortan ~100 px por lado: la píldora, los textos y los carteles quedan siempre adentro
   "cam_focus": [0.5, 0.5],                 # punto fijo del zoom en la cámara (fracción x, y): poné el mentón
   "cam_fit": null,                         # NO USAR "width": deja franja oscura abajo. REGLA (Ali 05/11): el video cubre toda la pantalla.
                                            # Con cámara abajo: split_y 1000 y cam_crop [cara_x-236, borde_sup_facecam, 472, 402] (llena el cuadro)
@@ -110,7 +112,7 @@ def build_ass(spec, dur, hook_y, sub_y, path):
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Hook,{spec.get('hook_font', 'Montserrat Black')},{spec.get('hook_size', 92)},{WHITE},{WHITE},{BLACK},&H80000000,{0 if spec.get('hook_font') else 1},0,0,0,100,100,0,0,1,{spec.get('hook_outline', 7)},3,8,40,40,{hook_y},1",
-        f"Style: Sub,Montserrat ExtraBold,{spec.get('sub_size', 80)},{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,{spec.get('sub_outline', 6)},3,5,{spec.get('sub_margin', 50)},{spec.get('sub_margin', 50)},0,1",
+        f"Style: Sub,Montserrat ExtraBold,{spec.get('sub_size', 80)},{WHITE},{WHITE},{BLACK},&H80000000,1,0,0,0,100,100,0,0,1,{spec.get('sub_outline', 6)},3,5,{max(spec.get('sub_margin', 50), spec.get('safe_x', 120))},{max(spec.get('sub_margin', 50), spec.get('safe_x', 120))},0,1",
         "", "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -143,7 +145,7 @@ def _sunset(w, h):
     return g
 
 
-def miniatura_card(text, fonts_dir, path, maxw=940, size_white=150, size_grad=200):
+def miniatura_card(text, fonts_dir, path, maxw=840, size_white=150, size_grad=200):
     """Cartel estilo miniatura de YouTube. text: renglones con |; un renglón entre {} va en degradé."""
     from PIL import ImageFilter
     fpath = find_font(fonts_dir, "BarlowCondensed-Black.ttf")
@@ -267,6 +269,7 @@ def end_card(spec, fonts_dir, path):
 
 def main():
     spec = json.load(open(sys.argv[1], encoding="utf-8"))
+    SAFE_X = int(spec.get('safe_x', 120))
     src = spec["input"]; out = spec["output"]; fonts_dir = spec["fonts_dir"]
     sw, sh, sdur = probe(src)
     start = float(spec.get("start", 0)); end = spec.get("end") or sdur
@@ -375,19 +378,19 @@ def main():
             vf = f"[0:v]split={2 + ncz}[g][c]{extra};{game}{cam}{order}vstack=2{zoom_expr('full', W, H)}[base]"
         if top:   # cámara arriba, juego abajo
             hook_y, sub_y = cam_h - 60, cam_h + int(split_y * 0.62)
-            tag_xy = (30, 240)
+            tag_xy = (SAFE_X, 240)
             chat_center = (W // 2, cam_h + int(split_y * 0.35))
         else:     # cámara abajo
             hook_y, sub_y = 230, split_y
-            tag_xy = (30, split_y + 24)
+            tag_xy = (SAFE_X, split_y + 24)
             chat_center = (W // 2, int(split_y * 0.55))
     elif layout == "cam":
         vf = f"[0:v]{crop_expr(spec.get('cam_crop'), W, H)}{zoom_expr('cam', W, H)}{zoom_expr('full', W, H)}[base]"
-        hook_y, sub_y, tag_xy = 230, int(H * 0.62), (30, H - 140)
+        hook_y, sub_y, tag_xy = 230, int(H * 0.62), (SAFE_X, H - 140)
         chat_center = (W // 2, int(H * 0.45))
     else:
         vf = f"[0:v]{crop_expr(spec.get('game_crop'), W, H)}{zoom_expr('game', W, H)}{zoom_expr('full', W, H)}[base]"
-        hook_y, sub_y, tag_xy = 230, int(H * 0.62), (30, H - 140)
+        hook_y, sub_y, tag_xy = 230, int(H * 0.62), (SAFE_X, H - 140)
         chat_center = (W // 2, int(H * 0.45))
 
     cnt = [0]
